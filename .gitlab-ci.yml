@@ -1,0 +1,14 @@
+test:
+  stage: test
+  before_script:
+    - pip install -r dev-requirements.txt
+  script:
+    - black main.py
+    - isort main.py
+    - flake8 main.py
+
+build:
+  stage: test
+  image: docker:latest
+  script:
+    - docker build . -t heroku-cloudflare-app-domain
