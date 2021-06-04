@@ -1,4 +1,5 @@
 import os
+import re
 import time
 from collections import count
 
@@ -50,16 +51,17 @@ def main():
     heroku = heroku3.from_key(os.getenv("HEROKU_API_KEY"))
 
     interval = int(os.getenv("INTERVAL", 0))
+    matcher = re.compile(os.getenv("APP_NAME", r".*"))
 
     if interval:
         while True:
-            do_create(cf, heroku)
+            do_create(cf, heroku, matcher)
             time.sleep(interval)
     else:
-        do_create(cf, heroku)
+        do_create(cf, heroku, matcher)
 
 
-def do_create(cf, heroku):
+def do_create(cf, heroku, matcher):
     cf_zone = cf.zones.get(os.environ["CF_ZONE_ID"])["result"]
 
     all_records = list(
@@ -70,6 +72,9 @@ def do_create(cf, heroku):
     all_records_dict = {record["name"]: record["content"] for record in all_records}
 
     for app in heroku.apps():
+        if matcher.match(app.name) is None:
+            continue
+
         app_domain = f"{app.name}.{cf_zone['name']}"
         app_domains = {domain.hostname: domain.cname for domain in app.domains()}
 
