@@ -1,13 +1,13 @@
 # Heroku Cloudflare App Domain
 
-Creating branded herokuapp.com domains through Cloudflare, based on the app name (eg `my-app-prod.example.com`)
+Creating branded herokuapp.com-like domains using Cloudflare, based on the app name (eg `my-app-prod.example.com`).
 
 
 ## Features
 
 - Set records for domains which don't exist
 - Update records which are set incorrectly
-- Delete records which aren't referenced anymore in Heroku
+- Delete records which aren't referenced any more in Heroku
 - Enable / refresh [ACM](https://devcenter.heroku.com/articles/automated-certificate-management) when an app has its domain updated.
 
 ## Usage
