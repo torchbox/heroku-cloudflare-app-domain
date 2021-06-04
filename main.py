@@ -64,45 +64,55 @@ def main():
 def do_create(cf, heroku, matcher):
     cf_zone = cf.zones.get(os.environ["CF_ZONE_ID"])["result"]
 
-    all_records = list(
-        get_cloudflare_list(
+    all_records = {
+        record["name"]: record
+        for record in get_cloudflare_list(
             cf.zones.dns_records, cf_zone["id"], params={"type": "CNAME"}
         )
-    )
-    all_records_dict = {record["name"]: record["content"] for record in all_records}
+    }
+
+    apps_to_refresh_acm = set()
 
     for app in heroku.apps():
         if matcher.match(app.name) is None:
             continue
 
         app_domain = f"{app.name}.{cf_zone['name']}"
-        app_domains = {domain.hostname: domain.cname for domain in app.domains()}
+        app_domains = {domain.hostname: domain for domain in app.domains()}
 
-        cname = app_domains.get(app_domain)
-        existing_record = all_records_dict.get(app_domain)
+        existing_record = all_records.get(app_domain)
 
         # Add the domain to Heroku if it doesn't know about it
-        if not cname:
+        if app_domain not in app_domains:
+            print(app.name, "domain not set in Heroku")
             new_heroku_domain = app.add_domain(app_domain)
-            app_domains.add(new_heroku_domain)
-            cname = new_heroku_domain.cname
+            app_domains[new_heroku_domain.hostname] = new_heroku_domain
 
+        cname = getattr(app_domains.get(app_domain), "cname", None)
         cf_record_data = {
             "name": app.name,
             "type": "CNAME",
             "content": cname,
         }
-        if cname == existing_record:
+
+        if existing_record is None:
+            print(app.name, "domain not set")
+            cf.zones.dns_records.post(cf_zone["id"], data=cf_record_data)
+            apps_to_refresh_acm.add(app)
+        elif cname == existing_record["content"]:
             print(app.name, "domain set correctly")
         else:
-            if existing_record is None:
-                print(app.name, "domain not set")
-                cf.zones.dns_records.post(cf_zone["id"], data=cf_record_data)
-            else:
-                print(app.name, "incorrect record value")
-                cf.zones.dns_records.patch(cf_zone["id"], data=cf_record_data)
+            print(app.name, "incorrect record value")
+            cf.zones.dns_records.patch(
+                cf_zone["id"], existing_record["id"], data=cf_record_data
+            )
+            apps_to_refresh_acm.add(app)
 
-            if any(d.acm_status for d in app_domains):
+    if apps_to_refresh_acm:
+        print("Pausing before enabling ACM")
+        time.sleep(5)
+        for app in apps_to_refresh_acm:
+            if any(d.acm_status for d in app_domains.values()):
                 refresh_acm(app)
             else:
                 enable_acm(app)
