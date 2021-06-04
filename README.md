@@ -2,7 +2,6 @@
 
 Creating branded herokuapp.com-like domains using Cloudflare, based on the app name (eg `my-app-prod.example.com`).
 
-
 ## Features
 
 - Set records for domains which don't exist
@@ -23,6 +22,7 @@ Set some environment variables:
 Optionally:
 
 - `APP_NAME`: A regex of app names to act on. Any not matching this will be skipped.
+- `HEROKU_TEAMS`: A comma separated list of Heroku teams to operate on. By default will use all apps the account has access to.
 
 These can also be set in a `.env` file.
 

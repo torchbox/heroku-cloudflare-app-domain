@@ -7,6 +7,7 @@ import CloudFlare
 import heroku3
 import sentry_sdk
 from dotenv import load_dotenv
+from heroku3.models.app import App
 
 
 def get_cloudflare_list(api, *args, params=None):
@@ -40,6 +41,11 @@ def refresh_acm(app):
     ).raise_for_status()
 
 
+def get_apps_for_teams(heroku, teams):
+    for team in teams:
+        yield from heroku._get_resources(("teams", team, "apps"), App)
+
+
 def main():
     load_dotenv()
 
@@ -52,16 +58,19 @@ def main():
 
     interval = int(os.getenv("INTERVAL", 0))
     matcher = re.compile(os.getenv("APP_NAME", r".*"))
+    heroku_teams = (
+        os.getenv("HEROKU_TEAMS").split(",") if "HEROKU_TEAMS" in os.environ else None
+    )
 
     if interval:
         while True:
-            do_create(cf, heroku, matcher)
+            do_create(cf, heroku, matcher, heroku_teams)
             time.sleep(interval)
     else:
-        do_create(cf, heroku, matcher)
+        do_create(cf, heroku, matcher, heroku_teams)
 
 
-def do_create(cf, heroku, matcher):
+def do_create(cf, heroku, matcher, heroku_teams):
     cf_zone = cf.zones.get(os.environ["CF_ZONE_ID"])["result"]
 
     all_records = {
@@ -73,7 +82,13 @@ def do_create(cf, heroku, matcher):
 
     apps_to_refresh_acm = set()
 
-    for app in heroku.apps():
+    heroku_apps = (
+        heroku.apps()
+        if heroku_teams is None
+        else get_apps_for_teams(heroku, heroku_teams)
+    )
+
+    for app in heroku_apps:
         if matcher.match(app.name) is None:
             continue
 
