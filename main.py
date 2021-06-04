@@ -1,7 +1,7 @@
 import os
 import re
 import time
-from collections import count
+from itertools import count
 
 import CloudFlare
 import heroku3
