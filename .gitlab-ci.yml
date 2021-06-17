@@ -15,7 +15,13 @@ build:
   stage: test
   image: docker:latest
   script:
-    - docker build . -t heroku-cloudflare-app-domain
+    - docker build -t heroku-cloudflare-app-domain .
+
+build_web:
+  stage: test
+  image: docker:latest
+  script:
+    - docker build -f web/Dockerfile -t heroku-cloudflare-app-domain .
 
 deploy:
   stage: deploy
@@ -29,5 +35,5 @@ deploy:
     - mkdir -p $HOME/.docker
     - echo "$DOCKER_AUTH_CONFIG" >> "$HOME/.docker/config.json"
   script:
-    - docker build -t $BUILD_TAG .
+    - docker build -f web/Dockerfile -t $BUILD_TAG .
     - docker push $BUILD_TAG

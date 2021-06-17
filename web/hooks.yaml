@@ -1,0 +1,5 @@
+- id: trigger
+  execute-command: "./main.py"
+  command-working-directory: "/app/"
+  include-command-output-in-response: false
+  include-command-output-in-response-on-error: false
