@@ -1,3 +1,7 @@
+stages:
+  - test
+  - deploy
+
 test:
   stage: test
   before_script:
@@ -12,3 +16,18 @@ build:
   image: docker:latest
   script:
     - docker build . -t heroku-cloudflare-app-domain
+
+deploy:
+  stage: deploy
+  image: docker:stable
+  only:
+    - master
+  variables:
+    REGISTRY: "eu.gcr.io"
+    BUILD_TAG: "eu.gcr.io/torchbox-internal-tools/heroku-cloudflare-app-domain:$CI_COMMIT_REF_NAME"
+  before_script:
+    - mkdir -p $HOME/.docker
+    - echo "$DOCKER_AUTH_CONFIG" >> "$HOME/.docker/config.json"
+  script:
+    - docker build -t $BUILD_TAG .
+    - docker push $BUILD_TAG
