@@ -1,7 +1,6 @@
 - id: trigger
   execute-command: ./main.py
-  include-command-output-in-response: false
-  include-command-output-in-response-on-error: false
+  include-command-output-in-response: true
   trigger-rule-mismatch-http-response-code: 400
   trigger-rule:
     match:
