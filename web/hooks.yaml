@@ -1,4 +1,12 @@
 - id: trigger
-  execute-command: "./main.py"
+  execute-command: ./main.py
   include-command-output-in-response: false
   include-command-output-in-response-on-error: false
+  trigger-rule-mismatch-http-response-code: 400
+  trigger-rule:
+    match:
+      type: value
+      value: "{{ getenv "WEBHOOK_TOKEN" | js }}"
+      parameter:
+        source: header
+        name: X-Webhook-Token

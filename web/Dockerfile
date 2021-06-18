@@ -13,4 +13,4 @@ COPY main.py /app/
 
 EXPOSE 9000
 
-CMD webhook -hooks /app/hooks.yaml -verbose
+CMD webhook -hooks /app/hooks.yaml -template -verbose
