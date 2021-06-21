@@ -4,6 +4,7 @@ stages:
 
 test:
   stage: test
+  image: python:3.9-slim
   before_script:
     - pip install -r dev-requirements.txt
   script:
