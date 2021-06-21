@@ -27,3 +27,7 @@ Optionally:
 These can also be set in a `.env` file.
 
 Then, simply run the `main.py`. To have the application loop for you, specify an interval in seconds with `$INTERVAL`.
+
+## Deployment
+
+A `Dockerfile` is provided for convenience. For deploying as a webhook, see the [`web/`](./web/) directory.
