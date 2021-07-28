@@ -12,6 +12,12 @@ from dotenv import load_dotenv
 from heroku3.models.app import App
 
 
+SUCCESS_ACM_STATUS = {
+    "cert issued",
+    "pending",  # Assume this is ok. It'll be picked up on next iteration if it's not
+}
+
+
 def get_cloudflare_list(api, *args, params=None):
     """
     Hack around Cloudflare's API to get all results in a nice way
@@ -33,13 +39,6 @@ def enable_acm(app):
     print("Enabling ACM for", app.name)
     app._h._http_resource(
         method="POST", resource=("apps", app.id, "acm")
-    ).raise_for_status()
-
-
-def refresh_acm(app):
-    print("Refreshing ACM for", app.name)
-    app._h._http_resource(
-        method="PATCH", resource=("apps", app.id, "acm")
     ).raise_for_status()
 
 
@@ -82,9 +81,6 @@ def do_create(cf, heroku, matcher, heroku_teams):
         )
     }
 
-    apps_to_refresh_acm = set()
-    apps_to_enable_acm = set()
-
     heroku_apps = (
         heroku.apps()
         if heroku_teams is None
@@ -106,6 +102,13 @@ def do_create(cf, heroku, matcher, heroku_teams):
             new_heroku_domain = app.add_domain(app_domain)
             app_domains[new_heroku_domain.hostname] = new_heroku_domain
 
+        # This saves refreshing for the whole app, which can be noisy
+        if app_domains[app_domain].acm_status not in SUCCESS_ACM_STATUS:
+            print(app.name, "cycling domain to refresh ACM", app_domains[app_domain].acm_status)
+            app.remove_domain(app_domain)
+            new_heroku_domain = app.add_domain(app_domain)
+            app_domains[new_heroku_domain.hostname] = new_heroku_domain
+
         cname = getattr(app_domains.get(app_domain), "cname", None)
         cf_record_data = {
             "name": app.name,
@@ -113,13 +116,9 @@ def do_create(cf, heroku, matcher, heroku_teams):
             "content": cname,
         }
 
-        has_acm = any(d.acm_status for d in app_domains.values())
-        acm_update = False
-
         if existing_record is None:
             print(app.name, "domain not set")
             cf.zones.dns_records.post(cf_zone["id"], data=cf_record_data)
-            acm_update = True
         elif cname == existing_record["content"]:
             print(app.name, "domain set correctly")
         else:
@@ -127,25 +126,11 @@ def do_create(cf, heroku, matcher, heroku_teams):
             cf.zones.dns_records.patch(
                 cf_zone["id"], existing_record["id"], data=cf_record_data
             )
-            acm_update = True
 
-        if acm_update:
-            if has_acm:
-                apps_to_refresh_acm.add(app)
-            else:
-                apps_to_enable_acm.add(app)
-
-    if apps_to_enable_acm:
-        print("Pausing before enabling ACM")
-        time.sleep(5)
-        for app in apps_to_enable_acm:
+        # Enable ACM if not already, so certs can be issued
+        has_acm = any(d.acm_status for d in app_domains.values())
+        if not has_acm:
             enable_acm(app)
-
-    if apps_to_refresh_acm:
-        print("Pausing before refreshing ACM")
-        time.sleep(5)
-        for app in apps_to_refresh_acm:
-            refresh_acm(app)
 
 
 if __name__ == "__main__":
