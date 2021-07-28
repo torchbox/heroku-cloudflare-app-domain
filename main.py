@@ -83,6 +83,7 @@ def do_create(cf, heroku, matcher, heroku_teams):
     }
 
     apps_to_refresh_acm = set()
+    apps_to_enable_acm = set()
 
     heroku_apps = (
         heroku.apps()
@@ -112,10 +113,13 @@ def do_create(cf, heroku, matcher, heroku_teams):
             "content": cname,
         }
 
+        has_acm = any(d.acm_status for d in app_domains.values())
+        acm_update = False
+
         if existing_record is None:
             print(app.name, "domain not set")
             cf.zones.dns_records.post(cf_zone["id"], data=cf_record_data)
-            apps_to_refresh_acm.add(app)
+            acm_update = True
         elif cname == existing_record["content"]:
             print(app.name, "domain set correctly")
         else:
@@ -123,16 +127,25 @@ def do_create(cf, heroku, matcher, heroku_teams):
             cf.zones.dns_records.patch(
                 cf_zone["id"], existing_record["id"], data=cf_record_data
             )
-            apps_to_refresh_acm.add(app)
+            acm_update = True
 
-    if apps_to_refresh_acm:
+        if acm_update:
+            if has_acm:
+                apps_to_refresh_acm.add(app)
+            else:
+                apps_to_enable_acm.add(app)
+
+    if apps_to_enable_acm:
         print("Pausing before enabling ACM")
         time.sleep(5)
+        for app in apps_to_enable_acm:
+            enable_acm(app)
+
+    if apps_to_refresh_acm:
+        print("Pausing before refreshing ACM")
+        time.sleep(5)
         for app in apps_to_refresh_acm:
-            if any(d.acm_status for d in app_domains.values()):
-                refresh_acm(app)
-            else:
-                enable_acm(app)
+            refresh_acm(app)
 
 
 if __name__ == "__main__":
