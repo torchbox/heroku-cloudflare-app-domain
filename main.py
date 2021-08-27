@@ -132,6 +132,17 @@ def do_create(cf, heroku, matcher, heroku_teams):
         if not has_acm:
             enable_acm(app)
 
+    # Get the Heroku apps we know about
+    known_heroku_apps = {app.name for app in heroku_apps}
+
+    # Delete records for apps we don't know about
+    for existing_record in all_records.values():
+        if existing_record["content"].endswith("herokudns.com"):
+            app_name = existing_record["name"].split(".", 1)[0]
+            if app_name not in known_heroku_apps:
+                print(app_name, "stale app domain")
+                cf.zones.dns_records.delete(cf_zone["id"], existing_record["id"])
+
 
 if __name__ == "__main__":
     main()
