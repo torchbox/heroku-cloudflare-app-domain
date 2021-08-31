@@ -119,9 +119,7 @@ def do_create(cf, heroku, matcher, heroku_teams):
         if existing_record is None:
             print(app.name, "domain not set")
             cf.zones.dns_records.post(cf_zone["id"], data=cf_record_data)
-        elif cname == existing_record["content"]:
-            print(app.name, "domain set correctly")
-        else:
+        elif existing_record["content"] != cname:
             print(app.name, "incorrect record value")
             cf.zones.dns_records.patch(
                 cf_zone["id"], existing_record["id"], data=cf_record_data
