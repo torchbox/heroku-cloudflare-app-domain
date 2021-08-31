@@ -81,7 +81,7 @@ def do_create(cf, heroku, matcher, heroku_teams):
         )
     }
 
-    heroku_apps = (
+    heroku_apps = list(
         heroku.apps()
         if heroku_teams is None
         else get_apps_for_teams(heroku, heroku_teams)
