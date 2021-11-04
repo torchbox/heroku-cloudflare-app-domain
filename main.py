@@ -99,14 +99,14 @@ def do_create(cf, heroku, matcher, heroku_teams):
         # Add the domain to Heroku if it doesn't know about it
         if app_domain not in app_domains:
             print(app.name, "domain not set in Heroku")
-            new_heroku_domain = app.add_domain(app_domain)
+            new_heroku_domain = app.add_domain(app_domain, sni_endpoint=None)
             app_domains[new_heroku_domain.hostname] = new_heroku_domain
 
         # This saves refreshing for the whole app, which can be noisy
         if app_domains[app_domain].acm_status not in SUCCESS_ACM_STATUS:
             print(app.name, "cycling domain to refresh ACM", app_domains[app_domain].acm_status)
             app.remove_domain(app_domain)
-            new_heroku_domain = app.add_domain(app_domain)
+            new_heroku_domain = app.add_domain(app_domain, sni_endpoint=None)
             app_domains[new_heroku_domain.hostname] = new_heroku_domain
 
         cname = getattr(app_domains.get(app_domain), "cname", None)
