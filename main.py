@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import logging
 import os
 import re
 import time
@@ -10,7 +11,6 @@ import heroku3
 import sentry_sdk
 from dotenv import load_dotenv
 from heroku3.models.app import App
-
 
 SUCCESS_ACM_STATUS = {
     "cert issued",
@@ -36,7 +36,7 @@ def get_cloudflare_list(api, *args, params=None):
 
 
 def enable_acm(app):
-    print("Enabling ACM for", app.name)
+    logging.info("Enabling ACM for %s", app.name)
     app._h._http_resource(
         method="POST", resource=("apps", app.id, "acm")
     ).raise_for_status()
@@ -98,13 +98,16 @@ def do_create(cf, heroku, matcher, heroku_teams):
 
         # Add the domain to Heroku if it doesn't know about it
         if app_domain not in app_domains:
-            print(app.name, "domain not set in Heroku")
+            logging.info("%s: domain not set in Heroku", app.name)
             new_heroku_domain = app.add_domain(app_domain, sni_endpoint=None)
             app_domains[new_heroku_domain.hostname] = new_heroku_domain
 
         # This saves refreshing for the whole app, which can be noisy
         if app_domains[app_domain].acm_status not in SUCCESS_ACM_STATUS:
-            print(app.name, "cycling domain to refresh ACM", app_domains[app_domain].acm_status)
+            logging.debug(
+                "%s: cycling domain to refresh ACM",
+                app.name
+            )
             app.remove_domain(app_domain)
             new_heroku_domain = app.add_domain(app_domain, sni_endpoint=None)
             app_domains[new_heroku_domain.hostname] = new_heroku_domain
@@ -117,10 +120,10 @@ def do_create(cf, heroku, matcher, heroku_teams):
         }
 
         if existing_record is None:
-            print(app.name, "domain not set")
+            logging.info("%s: domain not set", app.name)
             cf.zones.dns_records.post(cf_zone["id"], data=cf_record_data)
         elif existing_record["content"] != cname:
-            print(app.name, "incorrect record value")
+            logging.warning("%s: incorrect record value", app.name)
             cf.zones.dns_records.patch(
                 cf_zone["id"], existing_record["id"], data=cf_record_data
             )
@@ -138,7 +141,7 @@ def do_create(cf, heroku, matcher, heroku_teams):
         if existing_record["content"].endswith("herokudns.com"):
             app_name = existing_record["name"].split(".", 1)[0]
             if app_name not in known_heroku_apps:
-                print(app_name, "stale app domain")
+                logging.warning("%s: stale app domain", app_name)
                 cf.zones.dns_records.delete(cf_zone["id"], existing_record["id"])
 
 
