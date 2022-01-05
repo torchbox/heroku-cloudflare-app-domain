@@ -30,4 +30,10 @@ Then, simply run the `main.py`. To have the application loop for you, specify an
 
 ## Deployment
 
-For deploying as a webhook, see the [`web/`](./web/) directory.
+In some hosting environments, it may not be possible to run the container as a background job (eg [Cloud Run](https://cloud.google.com/run/)).
+
+To account for this, the default container wraps the command in [`webhook`](https://github.com/adnanh/webhook).
+
+To trigger the hook, send a `GET` request to `/hooks/trigger`. The webhook is protected by a token, which can be set using `$WEBHOOK_TOKEN`, and should be sent in the `X-Webhook-Token` header.
+
+To run in a loop instead of a webhook, set `$INTERVAL` in the container.
