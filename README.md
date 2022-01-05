@@ -1,5 +1,7 @@
 # Heroku Cloudflare App Domain
 
+[![Main](https://github.com/torchbox/heroku-cloudflare-app-domain/actions/workflows/main.yml/badge.svg)](https://github.com/torchbox/heroku-cloudflare-app-domain/actions/workflows/main.yml)
+
 Creating branded herokuapp.com-like domains using Cloudflare, based on the app name (eg `my-app-prod.example.com`).
 
 ## Features
