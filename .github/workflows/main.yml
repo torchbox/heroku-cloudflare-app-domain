@@ -1,0 +1,68 @@
+name: Main
+
+on:
+  push:
+    branches:
+      - master
+  pull_request: {}
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: pip-3.9-${{ hashFiles('dev-requirements.txt') }}-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Dependencies
+        run: pip install -r dev-requirements.txt
+
+      - name: Black
+        run: black main.py
+
+      - name: isort
+        run: isort main.py
+
+      - name: flake8
+        run: flake8 main.py
+
+  build-deploy:
+    runs-on: ubuntu-latest
+    needs:
+      - lint
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        if: ${{ github.ref == 'refs/heads/master' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push web container
+        uses: docker/build-push-action@v2
+        with:
+          push: ${{ github.ref == 'refs/heads/master' }}
+          file: web/Dockerfile
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/heroku-cloudflare-app-domain:build-${{ github.run_number }}
+            ghcr.io/${{ github.repository_owner }}/heroku-cloudflare-app-domain:web
+            ghcr.io/${{ github.repository_owner }}/heroku-cloudflare-app-domain:latest
+
+      - name: Build and push CLI container
+        uses: docker/build-push-action@v2
+        with:
+          push: ${{ github.ref == 'refs/heads/master' }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/heroku-cloudflare-app-domain:cli-build-${{ github.run_number }}
+            ghcr.io/${{ github.repository_owner }}/heroku-cloudflare-app-domain:cli
