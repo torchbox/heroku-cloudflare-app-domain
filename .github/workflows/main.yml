@@ -56,13 +56,4 @@ jobs:
           file: web/Dockerfile
           tags: |
             ghcr.io/${{ github.repository_owner }}/heroku-cloudflare-app-domain:build-${{ github.run_number }}
-            ghcr.io/${{ github.repository_owner }}/heroku-cloudflare-app-domain:web
             ghcr.io/${{ github.repository_owner }}/heroku-cloudflare-app-domain:latest
-
-      - name: Build and push CLI container
-        uses: docker/build-push-action@v2
-        with:
-          push: ${{ github.ref == 'refs/heads/master' }}
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/heroku-cloudflare-app-domain:cli-build-${{ github.run_number }}
-            ghcr.io/${{ github.repository_owner }}/heroku-cloudflare-app-domain:cli

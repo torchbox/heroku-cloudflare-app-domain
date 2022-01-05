@@ -30,4 +30,4 @@ Then, simply run the `main.py`. To have the application loop for you, specify an
 
 ## Deployment
 
-A `Dockerfile` is provided for convenience. For deploying as a webhook, see the [`web/`](./web/) directory.
+For deploying as a webhook, see the [`web/`](./web/) directory.
