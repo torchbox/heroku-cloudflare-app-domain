@@ -6,5 +6,5 @@ if [ -n "$INTERVAL" ]
 then
     python3 /app/main.py
 else
-    webhook -hooks /app/hooks.yaml -template -verbose
+    webhook -hooks /app/webhooks.yaml -template -verbose
 fi
