@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import socket
 import time
 from itertools import count
 
@@ -45,6 +46,17 @@ def enable_acm(app):
 def get_apps_for_teams(heroku, teams):
     for team in teams:
         yield from heroku._get_resources(("teams", team, "apps"), App)
+
+
+def record_exists(record: str) -> bool:
+    """
+    Determines whether a DNS record exists
+    """
+    try:
+        socket.getaddrinfo(record, None)
+    except socket.gaierror:
+        return False
+    return True
 
 
 def main():
@@ -104,10 +116,7 @@ def do_create(cf, heroku, matcher, heroku_teams):
 
         # This saves refreshing for the whole app, which can be noisy
         if app_domains[app_domain].acm_status not in SUCCESS_ACM_STATUS:
-            logging.debug(
-                "%s: cycling domain to refresh ACM",
-                app.name
-            )
+            logging.debug("%s: cycling domain to refresh ACM", app.name)
             app.remove_domain(app_domain)
             new_heroku_domain = app.add_domain(app_domain, sni_endpoint=None)
             app_domains[new_heroku_domain.hostname] = new_heroku_domain
@@ -133,16 +142,13 @@ def do_create(cf, heroku, matcher, heroku_teams):
         if not has_acm:
             enable_acm(app)
 
-    # Get the Heroku apps we know about
-    known_heroku_apps = {app.name for app in heroku_apps}
-
-    # Delete records for apps we don't know about
+    # Delete heroku records which don't exist anymore
+    # This intentionally doesn't contain records we just created, so the records propagate
     for existing_record in all_records.values():
-        if existing_record["content"].endswith("herokudns.com"):
-            app_name = existing_record["name"].split(".", 1)[0]
-            if app_name not in known_heroku_apps:
-                logging.warning("%s: stale app domain", app_name)
-                cf.zones.dns_records.delete(cf_zone["id"], existing_record["id"])
+        existing_value = existing_record["content"]
+        if existing_value.endswith("herokudns.com") and not record_exists(existing_value):
+            logging.warning("%s: stale heroku domain", existing_value)
+            cf.zones.dns_records.delete(cf_zone["id"], existing_record["id"])
 
 
 if __name__ == "__main__":
