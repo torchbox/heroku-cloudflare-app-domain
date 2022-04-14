@@ -15,4 +15,4 @@ COPY main.py /app/
 
 EXPOSE 9000
 
-CMD /app/entrypoint.sh
+CMD /app/docker-entrypoint.sh
