@@ -2,7 +2,7 @@
 
 set -e
 
-if [ -z "$INTERVAL" ]
+if [ -n "$INTERVAL" ]
 then
     python3 /app/main.py
 else
