@@ -39,3 +39,5 @@ To account for this, the default container wraps the command in [`webhook`](http
 To trigger the hook, send a `GET` request to `/hooks/trigger`. The webhook is protected by a token, which can be set using `$WEBHOOK_TOKEN`, and should be sent in the `X-Webhook-Token` header.
 
 To run in a loop instead of a webhook, set `$INTERVAL` in the container.
+
+Alternatively, it's possible to run on Heroku using its [scheduler](https://devcenter.heroku.com/articles/scheduler). Just add a job for `/app/main.py`, and stop the web processes.
