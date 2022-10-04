@@ -146,7 +146,9 @@ def do_create(cf, heroku, matcher, heroku_teams):
     # This intentionally doesn't contain records we just created, so the records propagate
     for existing_record in all_records.values():
         existing_value = existing_record["content"]
-        if existing_value.endswith("herokudns.com") and not record_exists(existing_value):
+        if existing_value.endswith("herokudns.com") and not record_exists(
+            existing_value
+        ):
             logging.warning("%s: stale heroku domain", existing_value)
             cf.zones.dns_records.delete(cf_zone["id"], existing_record["id"])
 
