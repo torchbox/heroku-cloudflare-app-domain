@@ -18,6 +18,10 @@ SUCCESS_ACM_STATUS = {
     "pending",  # Assume this is ok. It'll be picked up on next iteration if it's not
 }
 
+ALLOWED_CNAME_TARGETS = [
+    re.compile(t) for t in os.environ.get("ALLOWED_CNAME_TARGETS", "").split(",")
+]
+
 
 def get_cloudflare_list(api, *args, params=None):
     """
@@ -57,6 +61,13 @@ def record_exists(record: str) -> bool:
     except socket.gaierror:
         return False
     return True
+
+
+def is_allowed_cname_target(record: str) -> bool:
+    """
+    Is the record an allowed target
+    """
+    return any(target.match(record) for target in ALLOWED_CNAME_TARGETS)
 
 
 def main():
@@ -132,10 +143,13 @@ def do_create(cf, heroku, matcher, heroku_teams):
             logging.info("%s: domain not set", app.name)
             cf.zones.dns_records.post(cf_zone["id"], data=cf_record_data)
         elif existing_record["content"] != cname:
-            logging.warning("%s: incorrect record value", app.name)
-            cf.zones.dns_records.patch(
-                cf_zone["id"], existing_record["id"], data=cf_record_data
-            )
+            if is_allowed_cname_target(existing_record["content"]):
+                logging.info("%s: record is different, but an allowed value", app.name)
+            else:
+                logging.warning("%s: incorrect record value", app.name)
+                cf.zones.dns_records.patch(
+                    cf_zone["id"], existing_record["id"], data=cf_record_data
+                )
 
         # Enable ACM if not already, so certs can be issued
         has_acm = any(d.acm_status for d in app_domains.values())
