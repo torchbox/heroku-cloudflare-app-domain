@@ -1,4 +1,4 @@
-cloudflare==2.14.3
-python-dotenv==1.0.0
+cloudflare==4.0.0
+python-dotenv==1.0.1
 heroku3==5.2.1
-sentry-sdk==1.39.1
+sentry-sdk==2.20.0

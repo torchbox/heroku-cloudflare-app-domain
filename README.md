@@ -17,15 +17,17 @@ Install the dependencies listed in `requirements.txt`, ideally into a virtual en
 
 Set some environment variables:
 
-- `CF_API_KEY`: A Cloudflare API key, with access to the zone you wish to edit. "DNS Edit" is required for those zones.
+- `CLOUDFLARE_API_TOKEN`: A Cloudflare API token, with access to the zone you wish to edit. "DNS Edit" is required for those zones.
 - `HEROKU_API_KEY`: API key from Heroku
-- `CF_ZONE_ID`: The Cloudflare zone id of the domain to automatically create
+- `CLOUDFLARE_ZONE_ID`: The Cloudflare zone id of the domain to automatically create
 
 Optionally:
 
 - `APP_NAME`: A regex of app names to act on. Any not matching this will be skipped.
 - `HEROKU_TEAMS`: A comma separated list of Heroku teams to operate on. By default will use all apps the account has access to.
 - `ALLOWED_CNAME_TARGETS`: A comma-separated list of regexes which match CNAMEs. If these CNAMEs are found in place of the correct Heroku CNAME, they won't be overridden.
+- `LOG_LEVEL`: Log level to use (default "WARNING").
+- `DRY_RUN`: Whether to perform actions, or just say they happened (Either `true` or `false` (default)).
 
 These can also be set in a `.env` file.
 

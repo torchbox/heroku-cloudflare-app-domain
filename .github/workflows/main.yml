@@ -15,24 +15,21 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: "3.11"
+          python-version: "3.13"
 
       - uses: actions/cache@v2
         with:
           path: ~/.cache/pip
-          key: pip-3.11-${{ hashFiles('dev-requirements.txt') }}-${{ hashFiles('requirements.txt') }}
+          key: pip-3.13-${{ hashFiles('dev-requirements.txt') }}-${{ hashFiles('requirements.txt') }}
 
       - name: Install Dependencies
         run: pip install -r dev-requirements.txt
 
-      - name: Black
-        run: black main.py
+      - name: Format
+        run: ruff format --check main.py
 
-      - name: isort
-        run: isort main.py
-
-      - name: flake8
-        run: flake8 main.py
+      - name: Lint
+        run: ruff check main.py
 
   build-deploy:
     runs-on: ubuntu-latest
