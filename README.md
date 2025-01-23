@@ -26,7 +26,7 @@ Optionally:
 - `APP_NAME`: A regex of app names to act on. Any not matching this will be skipped.
 - `HEROKU_TEAMS`: A comma separated list of Heroku teams to operate on. By default will use all apps the account has access to.
 - `ALLOWED_CNAME_TARGETS`: A comma-separated list of regexes which match CNAMEs. If these CNAMEs are found in place of the correct Heroku CNAME, they won't be overridden.
-- `LOG_LEVEL`: Log level to use (default "WARNING").
+- `LOG_LEVEL`: Log level to use (default "INFO").
 - `DRY_RUN`: Whether to perform actions, or just say they happened (Either `true` or `false` (default)).
 
 These can also be set in a `.env` file.
