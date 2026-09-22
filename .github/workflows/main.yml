@@ -31,6 +31,9 @@ jobs:
       - name: Lint
         run: ruff check main.py
 
+      - name: Check types
+        run: mypy main.py
+
   build-deploy:
     runs-on: ubuntu-latest
     needs:

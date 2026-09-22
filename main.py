@@ -5,6 +5,7 @@ import os
 import re
 import socket
 import time
+from typing import Any, Iterator, cast
 
 import httpx
 import sentry_sdk
@@ -31,17 +32,19 @@ ALLOWED_CNAME_TARGETS = [
 HEROKU_API = "https://api.heroku.com"
 
 
-def heroku_api(session: httpx.Client, method: str, path: str, **kwargs):
+def heroku_api(
+    session: httpx.Client, method: str, path: str, **kwargs: Any
+) -> list[Any] | dict[str, Any]:
     resp = session.request(method, f"{HEROKU_API}{path}", **kwargs)
     resp.raise_for_status()
-    return resp.json()
+    return resp.json()  # type: ignore[no-any-return]
 
 
-def heroku_api_list(session: httpx.Client, path: str):
+def heroku_api_list(session: httpx.Client, path: str) -> Iterator[dict[str, Any]]:
     """GET a paginated Heroku list endpoint, yielding all items across pages."""
     next_range = None
     while True:
-        headers = {"Range": next_range} if next_range else {}
+        headers: dict[str, Any] = {"Range": next_range} if next_range else {}
         resp = session.get(f"{HEROKU_API}{path}", headers=headers)
         resp.raise_for_status()
         yield from resp.json()
@@ -50,11 +53,13 @@ def heroku_api_list(session: httpx.Client, path: str):
             break
 
 
-def enable_acm(heroku_session, app_name):
+def enable_acm(heroku_session: httpx.Client, app_name: str) -> None:
     heroku_api(heroku_session, "POST", f"/apps/{app_name}/acm")
 
 
-def get_apps_for_teams(heroku_session, teams):
+def get_apps_for_teams(
+    heroku_session: httpx.Client, teams: list[str]
+) -> Iterator[dict[str, Any]]:
     for team in teams:
         yield from heroku_api_list(heroku_session, f"/teams/{team}/apps")
 
@@ -87,7 +92,7 @@ def get_heroku_session() -> httpx.Client:
     )
 
 
-def main():
+def main() -> None:
     load_dotenv()
 
     if sentry_dsn := os.environ.get("SENTRY_DSN"):
@@ -99,9 +104,7 @@ def main():
 
     interval = int(os.getenv("INTERVAL", 0))
     matcher = re.compile(os.getenv("APP_NAME", r".*"))
-    heroku_teams = (
-        os.getenv("HEROKU_TEAMS").split(",") if "HEROKU_TEAMS" in os.environ else None
-    )
+    heroku_teams = os.getenv("HEROKU_TEAMS", "").split(",") or None
 
     dry_run = os.getenv("DRY_RUN", "false").lower() == "true"
 
@@ -115,9 +118,16 @@ def main():
 
 
 def do_create(
-    cf: Cloudflare, heroku_session: httpx.Client, matcher, heroku_teams, dry_run
-):
+    cf: Cloudflare,
+    heroku_session: httpx.Client,
+    matcher: re.Pattern[str],
+    heroku_teams: list[str] | None,
+    dry_run: bool,
+) -> None:
     cf_zone = cf.zones.get(zone_id=os.environ["CLOUDFLARE_ZONE_ID"])
+
+    if cf_zone is None:
+        raise ValueError("Unknown zone")
 
     all_records = {
         record.name: record
@@ -138,8 +148,8 @@ def do_create(
             continue
 
         app_domain = f"{app['name']}.{cf_zone.name}"
-        app_domains = {
-            d["hostname"]: d
+        app_domains: dict[str, dict] = {
+            d["hostname"]: d  # type: ignore[index,misc]
             for d in heroku_api(heroku_session, "GET", f"/apps/{app['name']}/domains")
         }
 
@@ -155,11 +165,14 @@ def do_create(
                     "cname": None,
                 }
             else:
-                new_heroku_domain = heroku_api(
-                    heroku_session,
-                    "POST",
-                    f"/apps/{app['name']}/domains",
-                    json={"hostname": app_domain, "sni_endpoint": None},
+                new_heroku_domain = cast(
+                    dict,
+                    heroku_api(
+                        heroku_session,
+                        "POST",
+                        f"/apps/{app['name']}/domains",
+                        json={"hostname": app_domain, "sni_endpoint": None},
+                    ),
                 )
                 app_domains[new_heroku_domain["hostname"]] = new_heroku_domain
 
@@ -172,11 +185,14 @@ def do_create(
             heroku_api(
                 heroku_session, "DELETE", f"/apps/{app['name']}/domains/{app_domain}"
             )
-            new_heroku_domain = heroku_api(
-                heroku_session,
-                "POST",
-                f"/apps/{app['name']}/domains",
-                json={"hostname": app_domain, "sni_endpoint": None},
+            new_heroku_domain = cast(
+                dict,
+                heroku_api(
+                    heroku_session,
+                    "POST",
+                    f"/apps/{app['name']}/domains",
+                    json={"hostname": app_domain, "sni_endpoint": None},
+                ),
             )
             app_domains[new_heroku_domain["hostname"]] = new_heroku_domain
 
@@ -187,7 +203,7 @@ def do_create(
             "content": cname,
         }
 
-        if existing_record is None:
+        if existing_record is None or not existing_record.content:
             logger.info("%s: domain not set", app["name"])
             if not dry_run:
                 cf.dns.records.create(zone_id=cf_zone.id, **cf_record_data)
@@ -221,7 +237,8 @@ def do_create(
     for existing_record in all_records.values():
         existing_value = existing_record.content
         if (
-            existing_record.name not in known_records
+            existing_value
+            and existing_record.name not in known_records
             and existing_value.endswith("herokudns.com")
             and not record_exists(existing_value)
         ):
