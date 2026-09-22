@@ -6,11 +6,10 @@ import re
 import socket
 import time
 
-import heroku3
+import httpx
 import sentry_sdk
 from cloudflare import Cloudflare
 from dotenv import load_dotenv
-from heroku3.models.app import App
 
 logger = logging.getLogger("heroku-cloudflare-app-domain")
 logging_handler = logging.StreamHandler()
@@ -29,26 +28,35 @@ ALLOWED_CNAME_TARGETS = [
 ]
 
 
-class FakeDomain:
-    """
-    A fake Domain object to stand in for Heroku's domain.
-    """
-
-    acm_status = True
-
-    def __init__(self, hostname):
-        self.domain = self.hostname = hostname
+HEROKU_API = "https://api.heroku.com"
 
 
-def enable_acm(app):
-    app._h._http_resource(
-        method="POST", resource=("apps", app.id, "acm")
-    ).raise_for_status()
+def heroku_api(session: httpx.Client, method: str, path: str, **kwargs):
+    resp = session.request(method, f"{HEROKU_API}{path}", **kwargs)
+    resp.raise_for_status()
+    return resp.json()
 
 
-def get_apps_for_teams(heroku, teams):
+def heroku_api_list(session: httpx.Client, path: str):
+    """GET a paginated Heroku list endpoint, yielding all items across pages."""
+    next_range = None
+    while True:
+        headers = {"Range": next_range} if next_range else {}
+        resp = session.get(f"{HEROKU_API}{path}", headers=headers)
+        resp.raise_for_status()
+        yield from resp.json()
+        next_range = resp.headers.get("Next-Range")
+        if not next_range:
+            break
+
+
+def enable_acm(heroku_session, app_name):
+    heroku_api(heroku_session, "POST", f"/apps/{app_name}/acm")
+
+
+def get_apps_for_teams(heroku_session, teams):
     for team in teams:
-        yield from heroku._get_resources(("teams", team, "apps"), App)
+        yield from heroku_api_list(heroku_session, f"/teams/{team}/apps")
 
 
 def record_exists(record: str) -> bool:
@@ -69,6 +77,16 @@ def is_allowed_cname_target(record: str) -> bool:
     return any(target.match(record) for target in ALLOWED_CNAME_TARGETS)
 
 
+def get_heroku_session() -> httpx.Client:
+    return httpx.Client(
+        transport=httpx.HTTPTransport(retries=3),
+        headers={
+            "Accept": "application/vnd.heroku+json; version=3",
+            "Authorization": f"Bearer {os.getenv('HEROKU_API_KEY')}",
+        },
+    )
+
+
 def main():
     load_dotenv()
 
@@ -79,8 +97,6 @@ def main():
 
     cf = Cloudflare()
 
-    heroku = heroku3.from_key(os.getenv("HEROKU_API_KEY"))
-
     interval = int(os.getenv("INTERVAL", 0))
     matcher = re.compile(os.getenv("APP_NAME", r".*"))
     heroku_teams = (
@@ -89,15 +105,18 @@ def main():
 
     dry_run = os.getenv("DRY_RUN", "false").lower() == "true"
 
-    if interval:
-        while True:
-            do_create(cf, heroku, matcher, heroku_teams, dry_run)
-            time.sleep(interval)
-    else:
-        do_create(cf, heroku, matcher, heroku_teams, dry_run)
+    with get_heroku_session() as heroku_session:
+        if interval:
+            while True:
+                do_create(cf, heroku_session, matcher, heroku_teams, dry_run)
+                time.sleep(interval)
+        else:
+            do_create(cf, heroku_session, matcher, heroku_teams, dry_run)
 
 
-def do_create(cf: Cloudflare, heroku, matcher, heroku_teams, dry_run):
+def do_create(
+    cf: Cloudflare, heroku_session: httpx.Client, matcher, heroku_teams, dry_run
+):
     cf_zone = cf.zones.get(zone_id=os.environ["CLOUDFLARE_ZONE_ID"])
 
     all_records = {
@@ -105,59 +124,80 @@ def do_create(cf: Cloudflare, heroku, matcher, heroku_teams, dry_run):
         for record in cf.dns.records.list(zone_id=cf_zone.id, type="CNAME")
     }
 
-    heroku_apps = list(
-        heroku.apps()
-        if heroku_teams is None
-        else get_apps_for_teams(heroku, heroku_teams)
-    )
+    if heroku_teams is None:
+        heroku_apps = list(heroku_api_list(heroku_session, "/apps"))
+    else:
+        heroku_apps = list(get_apps_for_teams(heroku_session, heroku_teams))
 
     known_records = set()
 
     logger.info("Checking %d apps", len(heroku_apps))
 
     for app in heroku_apps:
-        if matcher.match(app.name) is None:
+        if matcher.match(app["name"]) is None:
             continue
 
-        app_domain = f"{app.name}.{cf_zone.name}"
-        app_domains = {domain.hostname: domain for domain in app.domains()}
+        app_domain = f"{app['name']}.{cf_zone.name}"
+        app_domains = {
+            d["hostname"]: d
+            for d in heroku_api(heroku_session, "GET", f"/apps/{app['name']}/domains")
+        }
 
         existing_record = all_records.get(app_domain)
 
         # Add the domain to Heroku if it doesn't know about it
         if app_domain not in app_domains:
-            logger.info("%s: domain not set in Heroku", app.name)
+            logger.info("%s: domain not set in Heroku", app["name"])
             if dry_run:
-                app_domains[app_domain] = FakeDomain("example.herokudns.com")
+                app_domains[app_domain] = {
+                    "hostname": "example.herokudns.com",
+                    "acm_status": True,
+                    "cname": None,
+                }
             else:
-                new_heroku_domain = app.add_domain(app_domain, sni_endpoint=None)
-                app_domains[new_heroku_domain.hostname] = new_heroku_domain
+                new_heroku_domain = heroku_api(
+                    heroku_session,
+                    "POST",
+                    f"/apps/{app['name']}/domains",
+                    json={"hostname": app_domain, "sni_endpoint": None},
+                )
+                app_domains[new_heroku_domain["hostname"]] = new_heroku_domain
 
         # This saves refreshing for the whole app, which can be noisy
-        if not dry_run and app_domains[app_domain].acm_status not in SUCCESS_ACM_STATUS:
-            logger.debug("%s: cycling domain to refresh ACM", app.name)
-            app.remove_domain(app_domain)
-            new_heroku_domain = app.add_domain(app_domain, sni_endpoint=None)
-            app_domains[new_heroku_domain.hostname] = new_heroku_domain
+        if (
+            not dry_run
+            and app_domains[app_domain]["acm_status"] not in SUCCESS_ACM_STATUS
+        ):
+            logger.debug("%s: cycling domain to refresh ACM", app["name"])
+            heroku_api(
+                heroku_session, "DELETE", f"/apps/{app['name']}/domains/{app_domain}"
+            )
+            new_heroku_domain = heroku_api(
+                heroku_session,
+                "POST",
+                f"/apps/{app['name']}/domains",
+                json={"hostname": app_domain, "sni_endpoint": None},
+            )
+            app_domains[new_heroku_domain["hostname"]] = new_heroku_domain
 
-        cname = getattr(app_domains.get(app_domain), "cname", None)
+        cname = app_domains.get(app_domain, {}).get("cname")
         cf_record_data = {
-            "name": app.name,
+            "name": app["name"],
             "type": "CNAME",
             "content": cname,
         }
 
         if existing_record is None:
-            logger.info("%s: domain not set", app.name)
+            logger.info("%s: domain not set", app["name"])
             if not dry_run:
                 cf.dns.records.create(zone_id=cf_zone.id, **cf_record_data)
         elif existing_record.content != cname:
             if is_allowed_cname_target(existing_record.content):
                 logger.warning(
-                    "%s: record is different, but an allowed value", app.name
+                    "%s: record is different, but an allowed value", app["name"]
                 )
             else:
-                logger.warning("%s: incorrect record value", app.name)
+                logger.warning("%s: incorrect record value", app["name"])
                 if not dry_run:
                     cf.dns.records.edit(
                         zone_id=cf_zone.id,
@@ -165,14 +205,14 @@ def do_create(cf: Cloudflare, heroku, matcher, heroku_teams, dry_run):
                         **cf_record_data,
                     )
         else:
-            logger.debug("%s: No action needed", app.name)
+            logger.debug("%s: No action needed", app["name"])
 
         # Enable ACM if not already, so certs can be issued
-        has_acm = any(d.acm_status for d in app_domains.values())
+        has_acm = any(d["acm_status"] for d in app_domains.values())
         if not has_acm:
-            logger.info("Enabling ACM for %s", app.name)
+            logger.info("Enabling ACM for %s", app["name"])
             if not dry_run:
-                enable_acm(app)
+                enable_acm(heroku_session, app["name"])
 
         known_records.add(app_domain)
 
