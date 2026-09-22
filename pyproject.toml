@@ -1,7 +1,7 @@
 [project]
 name = "heroku-cloudflare-app-domain"
 version = "0.0.0"
-requires-python = "~=3.13"
+requires-python = "~=3.14.0"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "N", "B", "A", "C4", "T20", "S", "UP"]
