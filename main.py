@@ -5,7 +5,8 @@ import os
 import re
 import socket
 import time
-from typing import Any, Iterator, cast
+from collections.abc import Iterator
+from typing import Any, cast
 
 import httpx
 import sentry_sdk
